@@ -10,7 +10,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Build
-        run: go build .
+        run: VERSION=${{github.ref_name}} ./dist.sh
       - name: Create release
         id: create-release
         uses: https://git.d464.sh/actions/release@v1
@@ -25,4 +25,4 @@ jobs:
           token: ${{ secrets.AUTH_TOKEN }}
           release_id: ${{ steps.create-release.outputs.release_id }}
           paths: |
-             ./rpm-assembler
+             ./dist/*
