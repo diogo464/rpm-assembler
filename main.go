@@ -30,8 +30,8 @@ func ParseInputFile(v string) (InputFile, error) {
 	path := parts[0]
 	destination := parts[1]
 	mode := os.FileMode(0644)
-	owner := ""
-	group := ""
+	owner := "root"
+	group := "root"
 	if len(parts) >= 3 {
 		m, err := strconv.ParseUint(parts[2], 8, 32)
 		if err != nil {
