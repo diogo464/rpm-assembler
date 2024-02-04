@@ -1,7 +1,9 @@
 package main
 
 import (
+	"archive/tar"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path"
@@ -172,6 +174,13 @@ var (
 		EnvVars:  []string{"RPM_ASSEMBLER_CONFLICTS"},
 	}
 
+	FlagIncludeTar = &cli.StringSliceFlag{
+		Name:     "include-tar",
+		Usage:    "include a tar file in the package",
+		Required: false,
+		EnvVars:  []string{"RPM_ASSEMBLER_INCLUDE_TAR"},
+	}
+
 	FlagOutput = &cli.StringFlag{
 		Name:     "output",
 		Usage:    "output file. if not specified, the package will be written to the current working directory",
@@ -230,6 +239,46 @@ func action(c *cli.Context) error {
 		return errors.Wrap(err, "failed to create rpm")
 	}
 
+	for _, v := range c.StringSlice(FlagIncludeTar.Name) {
+		tarFile, err := os.Open(v)
+		if err != nil {
+			return errors.Wrapf(err, "failed to open tar file: %s", v)
+		}
+		defer tarFile.Close()
+
+		tr := tar.NewReader(tarFile)
+		for {
+			header, err := tr.Next()
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				return errors.Wrapf(err, "failed to read tar file: %s", v)
+			}
+
+			if header.Typeflag != tar.TypeReg {
+				if header.Typeflag != tar.TypeDir {
+					log.Printf("skipping non-regular file in %s: %s", v, header.Name)
+				}
+				continue
+			}
+
+			content, err := io.ReadAll(tr)
+			if err != nil {
+				return errors.Wrapf(err, "failed to read tar file: %s", v)
+			}
+
+			fileName := strings.TrimLeft(header.Name, ".")
+			r.AddFile(rpmpack.RPMFile{
+				Name:  fileName,
+				Body:  content,
+				Mode:  uint(header.Mode),
+				Owner: header.Uname,
+				Group: header.Gname,
+			})
+		}
+	}
+
 	for _, v := range c.Args().Slice() {
 		inputFile, err := ParseInputFile(v)
 		if err != nil {
@@ -279,7 +328,7 @@ func main() {
 		Usage:  "assemble rpm packages from artifacts",
 		Action: action,
 		Flags: []cli.Flag{
-			FlagName, FlagSummary, FlagDescription, FlagVersion, FlagRelease, FlagArch, FlagOS, FlagVendor, FlagURL, FlagPackager, FlagGroup, FlagLicence, FlagEpoch, FlagProvides, FlagRequires, FlagConflicts, FlagOutput,
+			FlagName, FlagSummary, FlagDescription, FlagVersion, FlagRelease, FlagArch, FlagOS, FlagVendor, FlagURL, FlagPackager, FlagGroup, FlagLicence, FlagEpoch, FlagProvides, FlagRequires, FlagConflicts, FlagIncludeTar, FlagOutput,
 		},
 		Args:            true,
 		ArgsUsage:       "[input files...]\n" + "  input files are specified as: <path>:<destination>[:<mode>[:<owner>[:<group>]]]",
